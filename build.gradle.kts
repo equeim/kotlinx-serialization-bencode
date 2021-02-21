@@ -20,7 +20,7 @@ kotlin {
         val jvmMain by getting {
             languageSettings.useExperimentalAnnotation("kotlinx.serialization.ExperimentalSerializationApi")
             dependencies {
-                api("org.jetbrains.kotlinx:kotlinx-serialization-core:1.0.1")
+                api("org.jetbrains.kotlinx:kotlinx-serialization-core:1.1.0")
             }
         }
         val jvmTest by getting {
