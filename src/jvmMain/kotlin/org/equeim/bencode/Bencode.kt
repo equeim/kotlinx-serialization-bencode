@@ -42,7 +42,7 @@ object Bencode {
     inline fun <reified T> encode(value: T, stringCharset: Charset = Charsets.UTF_8) = encode(value, serializer(), stringCharset)
 }
 
-private val byteArraySerializer = serializer<ByteArray>()
+private val byteArraySerializer by lazy(LazyThreadSafetyMode.PUBLICATION) { serializer<ByteArray>() }
 
 private open class Decoder(protected val inputStream: PushbackInputStream,
                            private val stringCharset: Charset) : AbstractDecoder() {
