@@ -1,5 +1,5 @@
 pluginManagement {
-    val kotlin = "1.4.30"
+    val kotlin = "1.4.32"
     plugins {
         kotlin("multiplatform") version(kotlin)
         kotlin("plugin.serialization") version(kotlin)
