@@ -122,7 +122,7 @@ private open class Decoder(protected val inputStream: PushbackInputStream,
         return byte.toChar()
     }
 
-    protected fun unreadChar(char: Char) = inputStream.unread(char.toInt())
+    protected fun unreadChar(char: Char) = inputStream.unread(char.code)
 }
 
 private abstract class CollectionDecoder(other: Decoder) : Decoder(other) {
@@ -290,21 +290,21 @@ private class Encoder(private val outputStream: OutputStream,
 
     override fun beginStructure(descriptor: SerialDescriptor): CompositeEncoder {
         when (descriptor.kind) {
-            StructureKind.CLASS -> outputStream.write('d'.toInt())
+            StructureKind.CLASS -> outputStream.write('d'.code)
             StructureKind.MAP -> {
                 if (!validateMapKeyType(descriptor)) {
                     throw SerializationException("Only maps with String or ByteArray keys are supported")
                 }
-                outputStream.write('d'.toInt())
+                outputStream.write('d'.code)
             }
-            StructureKind.LIST -> outputStream.write('l'.toInt())
+            StructureKind.LIST -> outputStream.write('l'.code)
             else -> throw SerializationException("Unsupported StructureKind")
         }
         return this
     }
 
     override fun endStructure(descriptor: SerialDescriptor) {
-        outputStream.write('e'.toInt())
+        outputStream.write('e'.code)
     }
 
     private fun validateMapKeyType(descriptor: SerialDescriptor): Boolean {
