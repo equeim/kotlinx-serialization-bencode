@@ -1,5 +1,7 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 plugins {
-    kotlin("multiplatform")
+    kotlin("jvm")
     kotlin("plugin.serialization")
 }
 
@@ -10,16 +12,13 @@ repositories {
     mavenCentral()
 }
 
-kotlin {
-    jvm {
-        compilations.configureEach {
-            kotlinOptions.jvmTarget = "1.8"
-        }
+tasks.named<KotlinCompile>("compileKotlin") {
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_1_8.toString()
+        freeCompilerArgs = freeCompilerArgs + "-Xopt-in=kotlinx.serialization.ExperimentalSerializationApi"
     }
-    sourceSets.named("jvmMain") {
-        languageSettings.useExperimentalAnnotation("kotlinx.serialization.ExperimentalSerializationApi")
-        dependencies {
-            api("org.jetbrains.kotlinx:kotlinx-serialization-core:1.2.0")
-        }
-    }
+}
+
+dependencies {
+    api("org.jetbrains.kotlinx:kotlinx-serialization-core:1.2.0")
 }
