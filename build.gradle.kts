@@ -20,5 +20,5 @@ tasks.named<KotlinCompile>("compileKotlin") {
 }
 
 dependencies {
-    api("org.jetbrains.kotlinx:kotlinx-serialization-core:1.2.0")
+    api("org.jetbrains.kotlinx:kotlinx-serialization-core:1.2.1")
 }
