@@ -1,5 +1,6 @@
 package org.equeim.bencode
 
+import kotlinx.coroutines.ensureActive
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.SerializationStrategy
@@ -20,27 +21,29 @@ import java.io.OutputStream
 import java.io.PushbackInputStream
 import java.nio.ByteBuffer
 import java.nio.charset.Charset
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.coroutineContext
 import kotlin.math.min
 
 @Suppress("SpellCheckingInspection")
 object Bencode {
-    fun <T> decode(inputStream: InputStream, deserializer: DeserializationStrategy<T>, stringCharset: Charset = Charsets.UTF_8): T {
-        return Decoder(inputStream, SharedState(stringCharset)).decodeSerializableValue(deserializer)
+    suspend fun <T> decode(inputStream: InputStream, deserializer: DeserializationStrategy<T>, stringCharset: Charset = Charsets.UTF_8): T {
+        return Decoder(inputStream, SharedState(stringCharset), coroutineContext).decodeSerializableValue(deserializer)
     }
 
-    fun <T> encode(value: T, outputStream: OutputStream, serializer: SerializationStrategy<T>, stringCharset: Charset = Charsets.UTF_8) {
-        Encoder(outputStream, stringCharset).encodeSerializableValue(serializer, value)
+    suspend fun <T> encode(value: T, outputStream: OutputStream, serializer: SerializationStrategy<T>, stringCharset: Charset = Charsets.UTF_8) {
+        Encoder(outputStream, stringCharset, coroutineContext).encodeSerializableValue(serializer, value)
     }
 
-    fun <T> encode(value: T, serializer: SerializationStrategy<T>, stringCharset: Charset = Charsets.UTF_8): ByteArray {
+    suspend fun <T> encode(value: T, serializer: SerializationStrategy<T>, stringCharset: Charset = Charsets.UTF_8): ByteArray {
         val outputStream = ByteArrayOutputStream()
-        Encoder(outputStream, stringCharset).encodeSerializableValue(serializer, value)
+        Encoder(outputStream, stringCharset, coroutineContext).encodeSerializableValue(serializer, value)
         return outputStream.toByteArray()
     }
 
-    inline fun <reified T> decode(inputStream: InputStream, stringCharset: Charset = Charsets.UTF_8): T = decode(inputStream, serializer(), stringCharset)
-    inline fun <reified T> encode(value: T, outputStream: OutputStream, stringCharset: Charset = Charsets.UTF_8) = encode(value, outputStream, serializer(), stringCharset)
-    inline fun <reified T> encode(value: T, stringCharset: Charset = Charsets.UTF_8) = encode(value, serializer(), stringCharset)
+    suspend inline fun <reified T> decode(inputStream: InputStream, stringCharset: Charset = Charsets.UTF_8): T = decode(inputStream, serializer(), stringCharset)
+    suspend inline fun <reified T> encode(value: T, outputStream: OutputStream, stringCharset: Charset = Charsets.UTF_8) = encode(value, outputStream, serializer(), stringCharset)
+    suspend inline fun <reified T> encode(value: T, stringCharset: Charset = Charsets.UTF_8) = encode(value, serializer(), stringCharset)
 }
 
 private class SharedState(stringCharset: Charset) {
@@ -80,9 +83,10 @@ private const val TEMP_BYTE_BUFFER_SIZE = 8192
 private val byteArraySerializer by lazy(LazyThreadSafetyMode.PUBLICATION) { serializer<ByteArray>() }
 
 private open class Decoder(protected val inputStream: PushbackInputStream,
-                           protected val sharedState: SharedState) : AbstractDecoder() {
-    constructor(inputStream: InputStream, sharedState: SharedState) : this(PushbackInputStream(inputStream, 1), sharedState)
-    constructor(other: Decoder) : this(other.inputStream, other.sharedState)
+                           protected val sharedState: SharedState,
+                           protected val coroutineContext: CoroutineContext) : AbstractDecoder() {
+    constructor(inputStream: InputStream, sharedState: SharedState, coroutineContext: CoroutineContext) : this(PushbackInputStream(inputStream, 1), sharedState, coroutineContext)
+    constructor(other: Decoder) : this(other.inputStream, other.sharedState, other.coroutineContext)
 
     override val serializersModule: SerializersModule = EmptySerializersModule
     override fun decodeSequentially(): Boolean = true
@@ -91,6 +95,7 @@ private open class Decoder(protected val inputStream: PushbackInputStream,
     private val stringBuilder = StringBuilder()
 
     override fun decodeElementIndex(descriptor: SerialDescriptor): Int {
+        println("decodeElementIndex() called with: descriptor = $descriptor")
         if (elementIndex == descriptor.elementsCount) return CompositeDecoder.DECODE_DONE
         return elementIndex++
     }
@@ -187,6 +192,8 @@ private abstract class CollectionDecoder(other: Decoder) : Decoder(other) {
     override fun decodeSequentially(): Boolean = false
 
     override fun decodeElementIndex(descriptor: SerialDescriptor): Int {
+        coroutineContext.ensureActive()
+
         val char = readChar()
         if (char == 'e') {
             return CompositeDecoder.DECODE_DONE
@@ -225,6 +232,8 @@ private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
 
     override fun decodeElementIndex(descriptor: SerialDescriptor): Int {
         while (true) {
+            coroutineContext.ensureActive()
+
             if (validKeysCount == descriptor.elementsCount) {
                 // Found all elements in the class, skip until end
                 skipDictionary()
@@ -287,6 +296,8 @@ private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
     // Start byte must already be read
     private fun skipList() {
         while (true) {
+            coroutineContext.ensureActive()
+
             val char = readChar()
             if (char == 'e') break
             unreadChar(char)
@@ -297,6 +308,8 @@ private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
     // Start byte must already be read
     private fun skipDictionary() {
         while (true) {
+            coroutineContext.ensureActive()
+
             val char = readChar()
             if (char == 'e') break
             unreadChar(char)
@@ -307,23 +320,28 @@ private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
 }
 
 private class Encoder(private val outputStream: OutputStream,
-                      private val stringCharset: Charset) : AbstractEncoder() {
+                      private val stringCharset: Charset,
+                      private val coroutineContext: CoroutineContext) : AbstractEncoder() {
     override val serializersModule: SerializersModule = EmptySerializersModule
 
     override fun encodeLong(value: Long) {
+        coroutineContext.ensureActive()
         outputStream.write("i${value}e".toByteArray(Charsets.US_ASCII))
     }
 
     private fun encodeByteArray(value: ByteArray) {
+        coroutineContext.ensureActive()
         outputStream.write("${value.size}:".toByteArray(Charsets.US_ASCII))
         outputStream.write(value)
     }
 
     override fun encodeString(value: String) {
+        coroutineContext.ensureActive()
         encodeByteArray(value.toByteArray(stringCharset))
     }
 
     override fun <T> encodeSerializableValue(serializer: SerializationStrategy<T>, value: T) {
+        coroutineContext.ensureActive()
         if (serializer === byteArraySerializer) {
             encodeByteArray(value as ByteArray)
         } else {
@@ -332,6 +350,7 @@ private class Encoder(private val outputStream: OutputStream,
     }
 
     override fun beginStructure(descriptor: SerialDescriptor): CompositeEncoder {
+        coroutineContext.ensureActive()
         when (descriptor.kind) {
             StructureKind.CLASS -> outputStream.write('d'.code)
             StructureKind.MAP -> {
