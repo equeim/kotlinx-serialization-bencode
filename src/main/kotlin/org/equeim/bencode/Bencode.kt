@@ -110,14 +110,14 @@ private open class Decoder(protected val inputStream: PushbackInputStream,
     }
 
     private fun decodeByteArray(): ByteArray {
-        val size = readIntegerUntil(':')
-        if (size == 0L) return byteArrayOf()
+        val size = readIntegerUntil(':').toInt()
         if (size < 0) throw SerializationException("Byte string length must not be negative")
+        if (size == 0) return byteArrayOf()
 
-        val value = ByteArray(size.toInt())
+        val value = ByteArray(size)
         var off = 0
-        while (off < value.size) {
-            val n = inputStream.read(value, off, value.size - off)
+        while (off < size) {
+            val n = inputStream.read(value, off, size - off)
             if (n == -1) throw EOFException()
             off += n
         }
