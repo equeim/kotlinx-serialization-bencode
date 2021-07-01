@@ -74,7 +74,7 @@ private open class Decoder(protected val inputStream: PushbackInputStream,
         }
     }
 
-    fun decodeByteArray(): ByteArray {
+    private fun decodeByteArray(): ByteArray {
         val size = readIntegerUntil(':')
         if (size == 0L) return byteArrayOf()
         if (size < 0) throw SerializationException("Byte string length must not be negative")
@@ -205,7 +205,7 @@ private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
                 break
             }
             unreadChar(char)
-            decodeByteArray()
+            skipByteArray()
             skipValue()
         }
     }
@@ -257,7 +257,7 @@ private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
             val char = readChar()
             if (char == 'e') break
             unreadChar(char)
-            decodeByteArray()
+            skipByteArray()
             skipValue()
         }
     }
