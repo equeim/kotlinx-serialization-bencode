@@ -176,7 +176,7 @@ private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
         while (true) {
             if (validKeysCount == descriptor.elementsCount) {
                 // Found all elements in the class, skip until end
-                skipUntilEnd()
+                skipDictionary()
                 return CompositeDecoder.DECODE_DONE
             }
 
@@ -195,18 +195,6 @@ private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
                 validKeysCount++
                 return index
             }
-        }
-    }
-
-    private fun skipUntilEnd() {
-        while (true) {
-            val char = readChar()
-            if (char == 'e') {
-                break
-            }
-            unreadChar(char)
-            skipByteArray()
-            skipValue()
         }
     }
 
