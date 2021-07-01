@@ -18,13 +18,14 @@ import java.io.EOFException
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.PushbackInputStream
+import java.nio.ByteBuffer
 import java.nio.charset.Charset
 import kotlin.math.min
 
 @Suppress("SpellCheckingInspection")
 object Bencode {
     fun <T> decode(inputStream: InputStream, deserializer: DeserializationStrategy<T>, stringCharset: Charset = Charsets.UTF_8): T {
-        return Decoder(inputStream, stringCharset).decodeSerializableValue(deserializer)
+        return Decoder(inputStream, SharedState(stringCharset)).decodeSerializableValue(deserializer)
     }
 
     fun <T> encode(value: T, outputStream: OutputStream, serializer: SerializationStrategy<T>, stringCharset: Charset = Charsets.UTF_8) {
@@ -42,12 +43,46 @@ object Bencode {
     inline fun <reified T> encode(value: T, stringCharset: Charset = Charsets.UTF_8) = encode(value, serializer(), stringCharset)
 }
 
+private class SharedState(stringCharset: Charset) {
+    val tempByteBuffer by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        ByteBuffer.allocate(TEMP_BYTE_BUFFER_SIZE)
+    }
+
+    val stringsCache by lazy(LazyThreadSafetyMode.PUBLICATION) { StringsCache(stringCharset) }
+
+    inner class StringsCache(private val stringCharset: Charset) : LruCache<ByteBuffer, String>(STRINGS_CACHE_SIZE) {
+        override fun sizeOf(key: ByteBuffer, value: String): Int {
+            // Approximation
+            return key.capacity() + value.length * 2;
+        }
+
+        // We can't override create() instead because we want to call get() with temp byte buffer,
+        // and if cache wasn't hit then we want to call put with unique buffer
+        fun get(byteBuffer: ByteBuffer, isTempByteBuffer: Boolean): String {
+            return get(byteBuffer) ?: run {
+                val key = if (isTempByteBuffer) {
+                    ByteBuffer.wrap(byteBuffer.array().copyOf(byteBuffer.limit()))
+                } else {
+                    byteBuffer
+                }
+                val value = String(byteBuffer.array(), 0, byteBuffer.limit(), stringCharset)
+                put(key, value)
+                value
+            }
+        }
+    }
+}
+
+private const val STRINGS_CACHE_SIZE = 1 * 1024 * 1024
+private const val TEMP_BYTE_BUFFER_SIZE = 8192
+
+
 private val byteArraySerializer by lazy(LazyThreadSafetyMode.PUBLICATION) { serializer<ByteArray>() }
 
 private open class Decoder(protected val inputStream: PushbackInputStream,
-                           private val stringCharset: Charset) : AbstractDecoder() {
-    constructor(inputStream: InputStream, stringCharset: Charset) : this(PushbackInputStream(inputStream, 1), stringCharset)
-    constructor(other: Decoder) : this(other.inputStream, other.stringCharset)
+                           protected val sharedState: SharedState) : AbstractDecoder() {
+    constructor(inputStream: InputStream, sharedState: SharedState) : this(PushbackInputStream(inputStream, 1), sharedState)
+    constructor(other: Decoder) : this(other.inputStream, other.sharedState)
 
     override val serializersModule: SerializersModule = EmptySerializersModule
     override fun decodeSequentially(): Boolean = true
@@ -90,7 +125,28 @@ private open class Decoder(protected val inputStream: PushbackInputStream,
     }
 
     override fun decodeString(): String {
-        return decodeByteArray().toString(stringCharset)
+        val size = readIntegerUntil(':').toInt()
+        if (size < 0) throw SerializationException("Byte string length must not be negative")
+
+        if (size == 0) return ""
+
+        val isTempByteBuffer: Boolean
+        val buffer = if (size <= TEMP_BYTE_BUFFER_SIZE) {
+            isTempByteBuffer = true
+            sharedState.tempByteBuffer.limit(size)
+        } else {
+            isTempByteBuffer = false
+            ByteBuffer.allocate(size)
+        }
+
+        var off = 0
+        while (off < size) {
+            val n = inputStream.read(buffer.array(), off, size - off)
+            if (n == -1) throw EOFException()
+            off += n
+        }
+
+        return sharedState.stringsCache.get(buffer, isTempByteBuffer)
     }
 
     override fun beginStructure(descriptor: SerialDescriptor): CompositeDecoder {
@@ -157,12 +213,7 @@ private class DictionaryDecoderForMap(other: Decoder) : CollectionDecoder(other)
 }
 
 private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
-    private companion object {
-        const val SKIP_BUFFER_SIZE = 8192
-    }
-
     private var validKeysCount = 0
-    private val skipBuffer by lazy(LazyThreadSafetyMode.NONE) { ByteArray(SKIP_BUFFER_SIZE) }
 
     init {
         if (readChar() != 'd') {
@@ -219,11 +270,15 @@ private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
 
     private fun skipByteArray() {
         val size = readIntegerUntil(':').toInt()
-        if (size == 0) return
         if (size < 0) throw SerializationException("Byte string length must not be negative")
+        if (size == 0) return
         var remaining = size
         while (remaining > 0) {
-            val n = inputStream.read(skipBuffer, 0, min(SKIP_BUFFER_SIZE, remaining))
+            val n = inputStream.read(
+                sharedState.tempByteBuffer.array(),
+                0,
+                min(TEMP_BYTE_BUFFER_SIZE, remaining)
+            )
             if (n == -1) throw EOFException()
             remaining -= n
         }
