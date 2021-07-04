@@ -9,7 +9,7 @@ version = "0.1"
 
 tasks.named<KotlinCompile>("compileKotlin") {
     kotlinOptions {
-        jvmTarget = JavaLanguageVersion.of(8).toString()
+        jvmTarget = JavaVersion.VERSION_1_8.toString()
         freeCompilerArgs = freeCompilerArgs + "-Xopt-in=kotlinx.serialization.ExperimentalSerializationApi"
     }
 }
