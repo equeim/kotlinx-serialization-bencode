@@ -24,6 +24,7 @@ import java.nio.ByteBuffer
 import java.nio.charset.Charset
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.coroutineContext
+import kotlin.math.log10
 import kotlin.math.min
 
 @Suppress("SpellCheckingInspection")
@@ -77,7 +78,7 @@ private class SharedState(stringCharset: Charset) {
 
 private const val STRINGS_CACHE_SIZE = 1 * 1024 * 1024
 private const val TEMP_BYTE_BUFFER_SIZE = 8192
-
+private val LONG_MAX_DIGITS = (Long.SIZE_BITS * log10(2.0)).toInt()
 
 private val byteArraySerializer by lazy(LazyThreadSafetyMode.PUBLICATION) { serializer<ByteArray>() }
 
@@ -91,7 +92,6 @@ private open class Decoder(protected val inputStream: PushbackInputStream,
     override fun decodeSequentially(): Boolean = true
 
     private var elementIndex = 0
-    private val stringBuilder = StringBuilder()
 
     override fun decodeElementIndex(descriptor: SerialDescriptor): Int {
         println("decodeElementIndex() called with: descriptor = $descriptor")
@@ -165,18 +165,39 @@ private open class Decoder(protected val inputStream: PushbackInputStream,
     }
 
     protected fun readIntegerUntil(terminator: Char): Long {
-        while (true) {
-            val char = readChar()
-            if (char == terminator) {
-                return try {
-                    stringBuilder.toString().toLong().also { stringBuilder.setLength(0) }
-                } catch (e: NumberFormatException) {
-                    throw SerializationException("Failed to parse Long from String", e)
-                }
+        var result = 0L
+        val negative: Boolean
+        var char = readChar()
+        when (char) {
+            terminator -> return result
+            '-' -> {
+                negative = true
+                char = readChar()
             }
-            stringBuilder.append(char)
+            else -> negative = false
         }
+
+        var n = 0
+        while (char != terminator) {
+            if (n == LONG_MAX_DIGITS) {
+                throw SerializationException("Didin't find terminator character when reading integer")
+            }
+
+            result *= 10
+            result -= char.toAsciiDigit
+            ++n
+
+            char = readChar()
+        }
+
+        return if (negative) result else -result
     }
+
+    private val Char.toAsciiDigit: Int
+        get() {
+            if (this in '0'..'9') return this - '0'
+            throw SerializationException("Character '$this' is not an ASCII digit")
+        }
 
     protected fun readChar(): Char {
         val byte = inputStream.read()
