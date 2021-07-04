@@ -94,7 +94,6 @@ private open class Decoder(protected val inputStream: PushbackInputStream,
     private var elementIndex = 0
 
     override fun decodeElementIndex(descriptor: SerialDescriptor): Int {
-        println("decodeElementIndex() called with: descriptor = $descriptor")
         if (elementIndex == descriptor.elementsCount) return CompositeDecoder.DECODE_DONE
         return elementIndex++
     }
