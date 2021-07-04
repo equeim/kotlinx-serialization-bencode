@@ -19,6 +19,7 @@ import java.io.EOFException
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.PushbackInputStream
+import java.nio.Buffer
 import java.nio.ByteBuffer
 import java.nio.charset.Charset
 import kotlin.coroutines.CoroutineContext
@@ -138,7 +139,9 @@ private open class Decoder(protected val inputStream: PushbackInputStream,
         val isTempByteBuffer: Boolean
         val buffer = if (size <= TEMP_BYTE_BUFFER_SIZE) {
             isTempByteBuffer = true
-            sharedState.tempByteBuffer.limit(size)
+            sharedState.tempByteBuffer.apply {
+                (this as Buffer).limit(size)
+            }
         } else {
             isTempByteBuffer = false
             ByteBuffer.allocate(size)
