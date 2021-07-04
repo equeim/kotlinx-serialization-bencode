@@ -56,7 +56,7 @@ private class SharedState(stringCharset: Charset) {
     inner class StringsCache(private val stringCharset: Charset) : LruCache<ByteBuffer, String>(STRINGS_CACHE_SIZE) {
         override fun sizeOf(key: ByteBuffer, value: String): Int {
             // Approximation
-            return key.capacity() + value.length * 2;
+            return key.capacity() + value.length * Char.SIZE_BYTES
         }
 
         // We can't override create() instead because we want to call get() with temp byte buffer,
