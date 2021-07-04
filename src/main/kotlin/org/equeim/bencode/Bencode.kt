@@ -48,11 +48,9 @@ object Bencode {
 }
 
 private class SharedState(stringCharset: Charset) {
-    val tempByteBuffer by lazy(LazyThreadSafetyMode.PUBLICATION) {
-        ByteBuffer.allocate(TEMP_BYTE_BUFFER_SIZE)
-    }
+    val tempByteBuffer: ByteBuffer = ByteBuffer.allocate(TEMP_BYTE_BUFFER_SIZE)
 
-    val stringsCache by lazy(LazyThreadSafetyMode.PUBLICATION) { StringsCache(stringCharset) }
+    val stringsCache = StringsCache(stringCharset)
 
     inner class StringsCache(private val stringCharset: Charset) : LruCache<ByteBuffer, String>(STRINGS_CACHE_SIZE) {
         override fun sizeOf(key: ByteBuffer, value: String): Int {
