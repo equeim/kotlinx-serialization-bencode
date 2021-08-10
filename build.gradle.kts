@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version("1.5.20")
+    kotlin("jvm") version("1.5.21")
 }
 
 group = "org.equeim"
@@ -21,6 +21,6 @@ repositories {
 }
 
 dependencies {
-    api("org.jetbrains.kotlinx:kotlinx-serialization-core:1.2.1")
-    api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.0")
+    api("org.jetbrains.kotlinx:kotlinx-serialization-core:1.2.2")
+    api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.1")
 }
