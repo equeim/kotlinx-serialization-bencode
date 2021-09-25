@@ -7,9 +7,8 @@ plugins {
 group = "org.equeim"
 version = "0.1"
 
-tasks.named<KotlinCompile>("compileKotlin") {
+tasks.withType<KotlinCompile> {
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_1_8.toString()
         freeCompilerArgs = freeCompilerArgs + "-Xopt-in=kotlinx.serialization.ExperimentalSerializationApi"
     }
 }
