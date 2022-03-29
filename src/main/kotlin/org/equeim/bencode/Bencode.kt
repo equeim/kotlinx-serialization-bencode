@@ -1,9 +1,7 @@
 package org.equeim.bencode
 
 import kotlinx.coroutines.ensureActive
-import kotlinx.serialization.DeserializationStrategy
-import kotlinx.serialization.SerializationException
-import kotlinx.serialization.SerializationStrategy
+import kotlinx.serialization.*
 import kotlinx.serialization.descriptors.PrimitiveKind
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.descriptors.StructureKind
@@ -13,7 +11,6 @@ import kotlinx.serialization.encoding.CompositeDecoder
 import kotlinx.serialization.encoding.CompositeEncoder
 import kotlinx.serialization.modules.EmptySerializersModule
 import kotlinx.serialization.modules.SerializersModule
-import kotlinx.serialization.serializer
 import java.io.ByteArrayOutputStream
 import java.io.EOFException
 import java.io.InputStream
@@ -82,6 +79,7 @@ private val LONG_MAX_DIGITS = (Long.SIZE_BITS * log10(2.0)).toInt()
 
 private val byteArraySerializer by lazy(LazyThreadSafetyMode.PUBLICATION) { serializer<ByteArray>() }
 
+@OptIn(ExperimentalSerializationApi::class)
 private open class Decoder(protected val inputStream: PushbackInputStream,
                            protected val sharedState: SharedState,
                            protected val coroutineContext: CoroutineContext) : AbstractDecoder() {
@@ -251,6 +249,7 @@ private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
 
     override fun decodeSequentially(): Boolean = false
 
+    @OptIn(ExperimentalSerializationApi::class)
     override fun decodeElementIndex(descriptor: SerialDescriptor): Int {
         while (true) {
             coroutineContext.ensureActive()
@@ -340,6 +339,7 @@ private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
     }
 }
 
+@OptIn(ExperimentalSerializationApi::class)
 private class Encoder(private val outputStream: OutputStream,
                       private val stringCharset: Charset,
                       private val coroutineContext: CoroutineContext) : AbstractEncoder() {
