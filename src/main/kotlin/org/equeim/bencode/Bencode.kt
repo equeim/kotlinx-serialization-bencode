@@ -28,7 +28,7 @@ import kotlin.math.min
 @Suppress("SpellCheckingInspection", "unused")
 object Bencode {
     suspend fun <T> decode(inputStream: InputStream, deserializer: DeserializationStrategy<T>, stringCharset: Charset = DEFAULT_CHARSET): T {
-        return Decoder(inputStream, SharedState(stringCharset), coroutineContext).decodeSerializableValue(deserializer)
+        return Decoder(inputStream, SharedDecoderState(stringCharset), coroutineContext).decodeSerializableValue(deserializer)
     }
 
     suspend fun <T> encode(value: T, outputStream: OutputStream, serializer: SerializationStrategy<T>, stringCharset: Charset = DEFAULT_CHARSET) {
@@ -48,45 +48,15 @@ object Bencode {
     val DEFAULT_CHARSET: Charset = StandardCharsets.UTF_8
 }
 
-private class SharedState(stringCharset: Charset) {
-    val tempByteBuffer: ByteBuffer = ByteBuffer.allocate(TEMP_BYTE_BUFFER_SIZE)
-
-    val stringsCache = StringsCache(stringCharset)
-
-    inner class StringsCache(private val stringCharset: Charset) : LruCache<ByteBuffer, String>(STRINGS_CACHE_SIZE) {
-        override fun sizeOf(key: ByteBuffer, value: String): Int {
-            // Approximation
-            return key.capacity() + value.length * Char.SIZE_BYTES
-        }
-
-        // We can't override create() instead because we want to call get() with temp byte buffer,
-        // and if cache wasn't hit then we want to call put with unique buffer
-        fun get(byteBuffer: ByteBuffer, isTempByteBuffer: Boolean): String {
-            return get(byteBuffer) ?: run {
-                val key = if (isTempByteBuffer) {
-                    ByteBuffer.wrap(byteBuffer.array().copyOf(byteBuffer.limit()))
-                } else {
-                    byteBuffer
-                }
-                val value = String(byteBuffer.array(), 0, byteBuffer.limit(), stringCharset)
-                put(key, value)
-                value
-            }
-        }
-    }
-}
-
-private const val STRINGS_CACHE_SIZE = 1 * 1024 * 1024
-private const val TEMP_BYTE_BUFFER_SIZE = 8192
 private val LONG_MAX_DIGITS = (Long.SIZE_BITS * log10(2.0)).toInt()
 
 private val byteArraySerializer by lazy(LazyThreadSafetyMode.PUBLICATION) { serializer<ByteArray>() }
 
 @OptIn(ExperimentalSerializationApi::class)
 private open class Decoder(protected val inputStream: PushbackInputStream,
-                           protected val sharedState: SharedState,
+                           protected val sharedState: SharedDecoderState,
                            protected val coroutineContext: CoroutineContext) : AbstractDecoder() {
-    constructor(inputStream: InputStream, sharedState: SharedState, coroutineContext: CoroutineContext) : this(PushbackInputStream(inputStream, 1), sharedState, coroutineContext)
+    constructor(inputStream: InputStream, sharedState: SharedDecoderState, coroutineContext: CoroutineContext) : this(PushbackInputStream(inputStream, 1), sharedState, coroutineContext)
     constructor(other: Decoder) : this(other.inputStream, other.sharedState, other.coroutineContext)
 
     override val serializersModule: SerializersModule = EmptySerializersModule
@@ -135,7 +105,7 @@ private open class Decoder(protected val inputStream: PushbackInputStream,
         if (size == 0) return ""
 
         val isTempByteBuffer: Boolean
-        val buffer = if (size <= TEMP_BYTE_BUFFER_SIZE) {
+        val buffer = if (size <= sharedState.tempByteBuffer.capacity()) {
             isTempByteBuffer = true
             sharedState.tempByteBuffer.apply {
                 (this as Buffer).limit(size)
@@ -165,18 +135,17 @@ private open class Decoder(protected val inputStream: PushbackInputStream,
     }
 
     protected fun readIntegerUntil(terminator: Char): Long {
-        var result = 0L
-        val negative: Boolean
         var char = readChar()
-        when (char) {
-            terminator -> return result
+        val negative = when (char) {
+            terminator -> return 0
             '-' -> {
-                negative = true
                 char = readChar()
+                true
             }
-            else -> negative = false
+            else -> false
         }
 
+        var result = 0L
         var n = 0
         while (char != terminator) {
             if (n == LONG_MAX_DIGITS) {
@@ -184,7 +153,7 @@ private open class Decoder(protected val inputStream: PushbackInputStream,
             }
 
             result *= 10
-            result -= char.toAsciiDigit
+            result -= char.toAsciiDigit()
             ++n
 
             char = readChar()
@@ -193,11 +162,10 @@ private open class Decoder(protected val inputStream: PushbackInputStream,
         return if (negative) result else -result
     }
 
-    private val Char.toAsciiDigit: Int
-        get() {
-            if (this in '0'..'9') return this - '0'
-            throw SerializationException("Character '$this' is not an ASCII digit")
-        }
+    private fun Char.toAsciiDigit(): Int {
+        if (this in '0'..'9') return this - '0'
+        throw SerializationException("Character '$this' is not an ASCII digit")
+    }
 
     protected fun readChar(): Char {
         val byte = inputStream.read()
@@ -309,7 +277,7 @@ private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
             val n = inputStream.read(
                 sharedState.tempByteBuffer.array(),
                 0,
-                min(TEMP_BYTE_BUFFER_SIZE, remaining)
+                min(sharedState.tempByteBuffer.capacity(), remaining)
             )
             if (n == -1) throw EOFException()
             remaining -= n
