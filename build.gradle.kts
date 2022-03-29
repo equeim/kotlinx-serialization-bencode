@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version("1.5.31")
+    alias(libs.plugins.kotlin.jvm)
 }
 
 group = "org.equeim"
@@ -13,13 +13,13 @@ tasks.withType<KotlinCompile> {
     }
 }
 
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(8))
+java.toolchain.languageVersion.set(JavaLanguageVersion.of(libs.versions.java.version.get()))
 
 repositories {
     mavenCentral()
 }
 
 dependencies {
-    api("org.jetbrains.kotlinx:kotlinx-serialization-core:1.3.0")
-    api("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.2")
+    api(libs.serialization.core)
+    api(libs.coroutines.core)
 }
