@@ -16,10 +16,7 @@ import java.io.PushbackInputStream
 import java.nio.Buffer
 import java.nio.ByteBuffer
 import kotlin.coroutines.CoroutineContext
-import kotlin.math.log10
 import kotlin.math.min
-
-private val LONG_MAX_DIGITS = (Long.SIZE_BITS * log10(2.0)).toInt()
 
 @OptIn(ExperimentalSerializationApi::class)
 internal open class Decoder(protected val inputStream: PushbackInputStream,
@@ -41,8 +38,8 @@ internal open class Decoder(protected val inputStream: PushbackInputStream,
     }
 
     override fun decodeLong(): Long {
-        if (readChar() != 'i') throw SerializationException("Integer does not begin with 'i'")
-        return readIntegerUntil('e')
+        if (readChar() != INTEGER_PREFIX) throw SerializationException("Integer does not begin with '${INTEGER_PREFIX}'")
+        return readIntegerUntil(INTEGER_TERMINATOR)
     }
 
     override fun <T> decodeSerializableValue(deserializer: DeserializationStrategy<T>, previousValue: T?): T {
@@ -55,8 +52,8 @@ internal open class Decoder(protected val inputStream: PushbackInputStream,
     }
 
     private fun decodeByteArray(): ByteArray {
-        val size = readIntegerUntil(':').toInt()
-        if (size < 0) throw SerializationException("Byte string length must not be negative")
+        val size = readIntegerUntil(BYTE_ARRAY_LENGTH_VALUE_SEPARATOR).toInt()
+        if (size < 0) throw SerializationException("Byte array length $size must not be negative")
         if (size == 0) return byteArrayOf()
 
         val value = ByteArray(size)
@@ -70,8 +67,8 @@ internal open class Decoder(protected val inputStream: PushbackInputStream,
     }
 
     override fun decodeString(): String {
-        val size = readIntegerUntil(':').toInt()
-        if (size < 0) throw SerializationException("Byte string length must not be negative")
+        val size = readIntegerUntil(BYTE_ARRAY_LENGTH_VALUE_SEPARATOR).toInt()
+        if (size < 0) throw SerializationException("Byte array length $size must not be negative")
 
         if (size == 0) return ""
 
@@ -109,7 +106,7 @@ internal open class Decoder(protected val inputStream: PushbackInputStream,
         var char = readChar()
         val negative = when (char) {
             terminator -> return 0
-            '-' -> {
+            INTEGER_NEGATIVE_SIGN -> {
                 char = readChar()
                 true
             }
@@ -119,8 +116,8 @@ internal open class Decoder(protected val inputStream: PushbackInputStream,
         var result = 0L
         var n = 0
         while (char != terminator) {
-            if (n == LONG_MAX_DIGITS) {
-                throw SerializationException("Didin't find terminator character when reading integer")
+            if (n == INTEGER_MAX_DIGITS) {
+                throw SerializationException("Reached maximum length $INTEGER_MAX_DIGITS when reading integer")
             }
 
             result *= 10
@@ -133,11 +130,6 @@ internal open class Decoder(protected val inputStream: PushbackInputStream,
         return if (negative) result else -result
     }
 
-    private fun Char.toAsciiDigit(): Int {
-        if (this in '0'..'9') return this - '0'
-        throw SerializationException("Character '$this' is not an ASCII digit")
-    }
-
     protected fun readChar(): Char {
         val byte = inputStream.read()
         if (byte == -1) throw EOFException()
@@ -147,7 +139,7 @@ internal open class Decoder(protected val inputStream: PushbackInputStream,
     protected fun unreadChar(char: Char) = inputStream.unread(char.code)
 }
 
-private abstract class CollectionDecoder(other: Decoder) : Decoder(other) {
+private abstract class CollectionDecoder(other: Decoder, private val terminator: Char) : Decoder(other) {
     private var elementIndex = 0
 
     override fun decodeSequentially(): Boolean = false
@@ -156,7 +148,7 @@ private abstract class CollectionDecoder(other: Decoder) : Decoder(other) {
         coroutineContext.ensureActive()
 
         val char = readChar()
-        if (char == 'e') {
+        if (char == terminator) {
             return CompositeDecoder.DECODE_DONE
         }
         unreadChar(char)
@@ -164,18 +156,18 @@ private abstract class CollectionDecoder(other: Decoder) : Decoder(other) {
     }
 }
 
-private class ListDecoder(other: Decoder) : CollectionDecoder(other) {
+private class ListDecoder(other: Decoder) : CollectionDecoder(other, LIST_TERMINATOR) {
     init {
-        if (readChar() != 'l') {
-            throw SerializationException("List does not start with 'l'")
+        if (readChar() != LIST_PREFIX) {
+            throw SerializationException("List does not start with '$LIST_PREFIX'")
         }
     }
 }
 
-private class DictionaryDecoderForMap(other: Decoder) : CollectionDecoder(other) {
+private class DictionaryDecoderForMap(other: Decoder) : CollectionDecoder(other, DICTIONARY_TERMINATOR) {
     init {
-        if (readChar() != 'd') {
-            throw SerializationException("Dictionary does not start with 'd'")
+        if (readChar() != DICTIONARY_PREFIX) {
+            throw SerializationException("Dictionary does not start with '$DICTIONARY_PREFIX'")
         }
     }
 }
@@ -184,8 +176,8 @@ private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
     private var validKeysCount = 0
 
     init {
-        if (readChar() != 'd') {
-            throw SerializationException("Dictionary does not start with 'd'")
+        if (readChar() != DICTIONARY_PREFIX) {
+            throw SerializationException("Dictionary does not start with '$DICTIONARY_PREFIX'")
         }
     }
 
@@ -203,7 +195,7 @@ private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
             }
 
             val char = readChar()
-            if (char == 'e') {
+            if (char == DICTIONARY_TERMINATOR) {
                 return CompositeDecoder.DECODE_DONE
             }
             unreadChar(char)
@@ -222,9 +214,9 @@ private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
 
     private fun skipValue() {
         when (val char = readChar()) {
-            'i' -> skipInteger()
-            'l' -> skipList()
-            'd' -> skipDictionary()
+            INTEGER_PREFIX -> skipInteger()
+            LIST_PREFIX -> skipList()
+            DICTIONARY_PREFIX -> skipDictionary()
             else -> {
                 unreadChar(char)
                 skipByteArray()
@@ -234,13 +226,13 @@ private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
 
     // Start byte must already be read
     private fun skipInteger() {
-        while (readChar() != 'e') {
+        while (readChar() != INTEGER_TERMINATOR) {
             // Just loop
         }
     }
 
     private fun skipByteArray() {
-        val size = readIntegerUntil(':').toInt()
+        val size = readIntegerUntil(BYTE_ARRAY_LENGTH_VALUE_SEPARATOR).toInt()
         if (size < 0) throw SerializationException("Byte string length must not be negative")
         if (size == 0) return
         var remaining = size
@@ -261,7 +253,7 @@ private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
             coroutineContext.ensureActive()
 
             val char = readChar()
-            if (char == 'e') break
+            if (char == LIST_TERMINATOR) break
             unreadChar(char)
             skipValue()
         }
@@ -273,7 +265,7 @@ private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
             coroutineContext.ensureActive()
 
             val char = readChar()
-            if (char == 'e') break
+            if (char == DICTIONARY_TERMINATOR) break
             unreadChar(char)
             skipByteArray()
             skipValue()

@@ -26,12 +26,12 @@ internal class Encoder(private val outputStream: OutputStream,
 
     override fun encodeLong(value: Long) {
         coroutineContext.ensureActive()
-        outputStream.write("i${value}e".toByteArray(Charsets.US_ASCII))
+        outputStream.write("${INTEGER_PREFIX}${value}${INTEGER_TERMINATOR}".toByteArray(Charsets.US_ASCII))
     }
 
     private fun encodeByteArray(value: ByteArray) {
         coroutineContext.ensureActive()
-        outputStream.write("${value.size}:".toByteArray(Charsets.US_ASCII))
+        outputStream.write("${value.size}${BYTE_ARRAY_LENGTH_VALUE_SEPARATOR}".toByteArray(Charsets.US_ASCII))
         outputStream.write(value)
     }
 
@@ -51,22 +51,28 @@ internal class Encoder(private val outputStream: OutputStream,
 
     override fun beginStructure(descriptor: SerialDescriptor): CompositeEncoder {
         coroutineContext.ensureActive()
-        when (descriptor.kind) {
-            StructureKind.CLASS -> outputStream.write('d'.code)
+        val prefix = when (descriptor.kind) {
+            StructureKind.CLASS -> DICTIONARY_PREFIX
             StructureKind.MAP -> {
                 if (!validateMapKeyType(descriptor)) {
                     throw SerializationException("Only maps with String or ByteArray keys are supported")
                 }
-                outputStream.write('d'.code)
+                DICTIONARY_PREFIX
             }
-            StructureKind.LIST -> outputStream.write('l'.code)
+            StructureKind.LIST -> LIST_PREFIX
             else -> throw SerializationException("Unsupported StructureKind")
         }
+        outputStream.write(prefix.code)
         return this
     }
 
     override fun endStructure(descriptor: SerialDescriptor) {
-        outputStream.write('e'.code)
+        val terminator = when (descriptor.kind) {
+            StructureKind.CLASS, StructureKind.MAP -> DICTIONARY_TERMINATOR
+            StructureKind.LIST -> LIST_TERMINATOR
+            else -> throw SerializationException("Unsupported StructureKind")
+        }
+        outputStream.write(terminator.code)
     }
 
     private fun validateMapKeyType(descriptor: SerialDescriptor): Boolean {
