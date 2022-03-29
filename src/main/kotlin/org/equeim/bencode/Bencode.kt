@@ -25,7 +25,7 @@ import kotlin.coroutines.coroutineContext
 import kotlin.math.log10
 import kotlin.math.min
 
-@Suppress("SpellCheckingInspection")
+@Suppress("SpellCheckingInspection", "unused")
 object Bencode {
     suspend fun <T> decode(inputStream: InputStream, deserializer: DeserializationStrategy<T>, stringCharset: Charset = DEFAULT_CHARSET): T {
         return Decoder(inputStream, SharedState(stringCharset), coroutineContext).decodeSerializableValue(deserializer)
