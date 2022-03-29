@@ -1,5 +1,6 @@
 package org.equeim.bencode
 
+import kotlinx.serialization.serializer
 import java.nio.ByteBuffer
 import java.nio.charset.Charset
 
@@ -7,6 +8,8 @@ private const val TEMP_BYTE_BUFFER_SIZE = 8192
 private const val STRINGS_CACHE_SIZE = 1 * 1024 * 1024
 
 internal class SharedDecoderState(stringCharset: Charset) {
+    val byteArraySerializer by lazy(LazyThreadSafetyMode.PUBLICATION) { serializer<ByteArray>() }
+
     val tempByteBuffer: ByteBuffer = ByteBuffer.allocate(TEMP_BYTE_BUFFER_SIZE)
 
     val stringsCache = StringsCache(stringCharset)
