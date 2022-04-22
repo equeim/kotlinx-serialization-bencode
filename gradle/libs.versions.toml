@@ -1,6 +1,7 @@
 [versions]
 java-version = "8"
-kotlin = "1.6.20"
+kotlin = "1.6.21"
+gradle-versions-plugin = "0.42.0"
 coroutines = "1.6.1"
 serialization = "1.3.2"
 
@@ -10,3 +11,4 @@ serialization-core = { module = "org.jetbrains.kotlinx:kotlinx-serialization-cor
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+gradle-versions-plugin = { id = "com.github.ben-manes.versions", version.ref = "gradle-versions-plugin" }
