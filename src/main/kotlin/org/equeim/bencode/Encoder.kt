@@ -10,7 +10,6 @@ import kotlinx.serialization.descriptors.StructureKind
 import kotlinx.serialization.encoding.AbstractEncoder
 import kotlinx.serialization.encoding.CompositeEncoder
 import kotlinx.serialization.modules.EmptySerializersModule
-import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.serializer
 import java.io.OutputStream
 import java.nio.charset.Charset
@@ -22,7 +21,7 @@ internal class Encoder(private val outputStream: OutputStream,
                       private val coroutineContext: CoroutineContext
 ) : AbstractEncoder() {
     private val byteArraySerializer by lazy(LazyThreadSafetyMode.PUBLICATION) { serializer<ByteArray>() }
-    override val serializersModule: SerializersModule = EmptySerializersModule
+    override val serializersModule = EmptySerializersModule()
 
     override fun encodeLong(value: Long) {
         coroutineContext.ensureActive()

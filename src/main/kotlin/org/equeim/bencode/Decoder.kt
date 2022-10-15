@@ -9,7 +9,6 @@ import kotlinx.serialization.descriptors.StructureKind
 import kotlinx.serialization.encoding.AbstractDecoder
 import kotlinx.serialization.encoding.CompositeDecoder
 import kotlinx.serialization.modules.EmptySerializersModule
-import kotlinx.serialization.modules.SerializersModule
 import java.io.EOFException
 import java.io.InputStream
 import java.io.PushbackInputStream
@@ -27,7 +26,7 @@ internal open class Decoder(protected val inputStream: PushbackInputStream,
         PushbackInputStream(inputStream, 1), sharedState, coroutineContext)
     constructor(other: Decoder) : this(other.inputStream, other.sharedState, other.coroutineContext)
 
-    override val serializersModule: SerializersModule = EmptySerializersModule
+    override val serializersModule = EmptySerializersModule()
     override fun decodeSequentially(): Boolean = true
 
     private var elementIndex = 0
