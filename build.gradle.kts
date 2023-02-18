@@ -10,13 +10,15 @@ plugins {
 group = "org.equeim"
 version = "0.1"
 
+val javaVersion = JavaVersion.VERSION_1_8
 tasks.withType<KotlinCompile> {
-    kotlinOptions {
-        freeCompilerArgs = freeCompilerArgs + "-opt-in=kotlin.RequiresOptIn"
-    }
+    kotlinOptions.jvmTarget = javaVersion.toString()
 }
-
-java.toolchain.languageVersion.set(JavaLanguageVersion.of(libs.versions.java.version.get()))
+tasks.withType<JavaCompile> {
+    options.release.set(javaVersion.majorVersion.toInt())
+    sourceCompatibility = javaVersion.toString()
+    targetCompatibility = javaVersion.toString()
+}
 
 repositories {
     mavenCentral()

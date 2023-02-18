@@ -1,7 +1,6 @@
 [versions]
-java-version = "8"
-kotlin = "1.7.20"
-gradle-versions-plugin = "0.42.0"
+kotlin = "1.8.10"
+gradle-versions-plugin = "0.45.0"
 coroutines = "1.6.4"
 serialization = "1.4.1"
 
