@@ -1,5 +1,5 @@
 [versions]
-kotlin = "1.9.22"
+kotlin = "1.9.23"
 gradle-versions-plugin = "0.51.0"
 coroutines = "1.8.0"
 serialization = "1.6.3"
