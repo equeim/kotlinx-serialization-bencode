@@ -1,5 +1,6 @@
 package org.equeim.bencode
 
+import androidx.collection.LruCache
 import kotlinx.serialization.serializer
 import java.nio.ByteBuffer
 import java.nio.charset.Charset

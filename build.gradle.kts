@@ -20,13 +20,10 @@ tasks.withType<JavaCompile> {
     targetCompatibility = javaVersion.toString()
 }
 
-repositories {
-    mavenCentral()
-}
-
 dependencies {
     api(libs.serialization.core)
     api(libs.coroutines.core)
+    implementation(libs.androidx.collection)
 }
 
 tasks.named<DependencyUpdatesTask>("dependencyUpdates") {
