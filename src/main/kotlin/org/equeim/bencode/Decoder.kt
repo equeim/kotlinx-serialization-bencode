@@ -50,6 +50,23 @@ internal open class Decoder(protected val inputStream: PushbackInputStream,
         }
     }
 
+    override fun <T> decodeSerializableElement(
+        descriptor: SerialDescriptor,
+        index: Int,
+        deserializer: DeserializationStrategy<T>,
+        previousValue: T?
+    ): T {
+        val startOffset = sharedState.readOffset
+        val value = super.decodeSerializableElement(descriptor, index, deserializer, previousValue)
+        if (descriptor.getElementAnnotations(index).any { it is ReportByteRange }) {
+            if (sharedState.byteRange != null) {
+                throw SerializationException("There can be only one property with ReportByteRange annotation")
+            }
+            sharedState.byteRange = ByteRange(startOffset, sharedState.readOffset - startOffset)
+        }
+        return value
+    }
+
     private fun decodeByteArray(): ByteArray {
         val size = readIntegerUntil(BYTE_ARRAY_LENGTH_VALUE_SEPARATOR).toInt()
         if (size < 0) throw SerializationException("Byte array length $size must not be negative")
@@ -62,6 +79,7 @@ internal open class Decoder(protected val inputStream: PushbackInputStream,
             if (n == -1) throw EOFException()
             off += n
         }
+        sharedState.readOffset += size
         return value
     }
 
@@ -81,13 +99,16 @@ internal open class Decoder(protected val inputStream: PushbackInputStream,
             isTempByteBuffer = false
             ByteBuffer.allocate(size)
         }
+        val array = buffer.array()
 
         var off = 0
         while (off < size) {
-            val n = inputStream.read(buffer.array(), off, size - off)
+            val n = inputStream.read(array, off, size - off)
             if (n == -1) throw EOFException()
             off += n
         }
+
+        sharedState.readOffset += size
 
         return sharedState.stringsCache.get(buffer, isTempByteBuffer)
     }
@@ -132,10 +153,14 @@ internal open class Decoder(protected val inputStream: PushbackInputStream,
     protected fun readChar(): Char {
         val byte = inputStream.read()
         if (byte == -1) throw EOFException()
+        sharedState.readOffset += 1
         return byte.toChar()
     }
 
-    protected fun unreadChar(char: Char) = inputStream.unread(char.code)
+    protected fun unreadChar(char: Char) {
+        inputStream.unread(char.code)
+        sharedState.readOffset -= 1
+    }
 }
 
 private abstract class CollectionDecoder(other: Decoder, private val terminator: Char) : Decoder(other) {
@@ -235,15 +260,18 @@ private class DictionaryDecoderForClass(other: Decoder) : Decoder(other) {
         if (size < 0) throw SerializationException("Byte string length must not be negative")
         if (size == 0) return
         var remaining = size
+        val array = sharedState.tempByteBuffer.array()
         while (remaining > 0) {
+            val len = min(sharedState.tempByteBuffer.capacity(), remaining)
             val n = inputStream.read(
-                sharedState.tempByteBuffer.array(),
+                array,
                 0,
-                min(sharedState.tempByteBuffer.capacity(), remaining)
+                len
             )
             if (n == -1) throw EOFException()
             remaining -= n
         }
+        sharedState.readOffset += size
     }
 
     // Start byte must already be read
