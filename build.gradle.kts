@@ -1,4 +1,5 @@
 import com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import java.util.Locale
 
@@ -12,7 +13,7 @@ version = "0.1"
 
 val javaVersion = JavaVersion.VERSION_1_8
 tasks.withType<KotlinCompile> {
-    kotlinOptions.jvmTarget = javaVersion.toString()
+    compilerOptions.jvmTarget.set(JvmTarget.fromTarget(javaVersion.toString()))
 }
 tasks.withType<JavaCompile> {
     options.release.set(javaVersion.majorVersion.toInt())
