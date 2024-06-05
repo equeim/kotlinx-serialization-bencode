@@ -28,20 +28,36 @@ dependencies {
 }
 
 tasks.named<DependencyUpdatesTask>("dependencyUpdates") {
-    val checker = DependencyVersionChecker()
+    gradleReleaseChannel = "current"
+    val channelProvider = VersionChannelProvider()
     rejectVersionIf {
-        checker.isNonStable(candidate.version)
+        val currentChannel = channelProvider.getChannel(currentVersion)
+        val candidateChannel = channelProvider.getChannel(candidate.version)
+        candidateChannel < currentChannel
     }
 }
 
-class DependencyVersionChecker {
-    private val stableKeywords = listOf("RELEASE", "FINAL", "GA")
-    private val regex = "^[0-9,.v-]+(-r)?$".toRegex()
+class VersionChannelProvider {
+    enum class Channel(private val keywords: List<String>) {
+        Alpha("alpha"),
+        Beta("beta"),
+        RC("rc"),
+        Stable("release", "final", "ga");
 
-    fun isNonStable(version: String): Boolean {
-        val versionUppercase = version.uppercase(Locale.ROOT)
-        val hasStableKeyword = stableKeywords.any(versionUppercase::contains)
-        val isStable = hasStableKeyword || regex.matches(version)
-        return isStable.not()
+        constructor(vararg keywords: String) : this(keywords.asList())
+
+        fun matches(versionLowercase: String): Boolean = keywords.any { versionLowercase.contains(it) }
+    }
+    private val channels = Channel.values()
+    private val stableVersionRegex = "^[0-9.]+$".toRegex()
+
+    fun getChannel(version: String): Channel {
+        val versionLowercase = version.lowercase(Locale.ROOT)
+        if (versionLowercase.matches(stableVersionRegex)) {
+            return Channel.Stable
+        }
+        val channelFromKeyword = channels.find { it.matches(versionLowercase) }
+        if (channelFromKeyword != null) return channelFromKeyword
+        throw RuntimeException("Failed to determine channel for version '$version'")
     }
 }
